@@ -257,16 +257,16 @@ void AirspyComponent::open_sn(string key, YAML::Node data)
 
             if (airspyhf_open_sn(&dev, sn) == AIRSPYHF_ERROR)
             {
-                stringstream os;
-                os << "Could not open " << sn;
-                rval["error"].push_back("AIRSPYHF_ERROR");
-                rval["error"].push_back(os.str());
+                airspyhf_response(rval, false, "Could not open ", sn);
+            }
+            else
+            {
+                devices[sn] = dev;
+                // reverse lookup
+                streamers[dev] = sn;
+                airspyhf_response(rval, true, "Opened", sn);
             }
 
-            devices[sn] = dev;
-            // reverse lookup
-            streamers[dev] = sn;
-            rval["error"].push_back("AIRSPYHF_SUCCESS");
             return rval;
         };
 
@@ -285,10 +285,7 @@ void AirspyComponent::close(string key, YAML::Node data)
 
             if (dev_pr == devices.end())
             {
-                stringstream os;
-                os << "could not find the device " << sn;
-                rval["error"].push_back("AIRSPYHF_ERROR");
-                rval["error"].push_back(os.str());
+                airspyhf_response(rval, false, "could not find the device", sn);
             }
             else
             {
