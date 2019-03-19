@@ -9,8 +9,6 @@ Keymaster:
   # temporary fix to limit yaml memory use	
   clone_interval: 50
 
-AIRSPYPARAMS:
-  
 # Components in the system
 #
 # Each component has a name by which it is known. Some components have 0
@@ -19,12 +17,15 @@ AIRSPYPARAMS:
 
 components:
   airspyhf:
-    time: 0
     type: AirspyHF
-  FFT:
-    type: IndicatorComponent
-  AA:
-    type: IndicatorComponent
+    devices: []
+    ringbuffer_pool_size: 32 # IQ buffer pool size
+    Sources:
+      iq_data: A
+    Transports:
+      A:
+        Specified: [rtinproc]
+
 # Connection mapping for the various configurations. The mapping is a
 # list of lists, which each element of the outer list being a 4-element
 # inner list: [source_component, source_name, sink_component, sink_name]
@@ -34,3 +35,89 @@ connections:
     - [ZZ]
     - [clock]
     - [AA]
+
+# This is the monitor and coltrol section, for the airspyhf
+# component. The idea is that any change to any of the `airspy_*`
+# values will trigger a publication of that value. Upon receipt the
+# component will execute the corresponding function with the given
+# parameters (if any). That's the idea, anyway. The AirspyHF component
+# will have to have a dedicated thread to respond to these
+# publications. It will use the internal thread in the airspyhf
+# library to publish IQ data over its conection.
+#
+# Note that AIRSPYPARAMS is a dictionary of dictionaries. The key of
+# each dictionary is the device's serial number. The entry
+# 0xFFFFFFFFFFFFFFFF is the key used for a single device opened via
+# 'airspyhf_open' rather than an 'airspyhf_open_sn'. It also serves as
+# the template for otherdevices.
+
+AIRSPYCMDS:
+  airspyhf_lib_version:
+    params: []
+    rval: []
+  airspyhf_list_devices:
+    params: []
+    rval: []
+  airspyhf_open:
+    params: []
+    rval: []
+  airspyhf_open_sn:
+    params: []
+    rval: []
+  airspyhf_close:
+    params: []
+    rval: []
+  airspyhf_start:
+    params: []
+    rval: []
+  airspyhf_stop:
+    params: []
+    rval: []
+  airspyhf_is_streaming:
+    params: []
+    rval: []
+  airspyhf_set_frequency:
+    params: []
+    rval: []
+  airspyhf_set_lib_dsp:
+    params: []
+    rval: []
+  airspyhf_get_sample_rates:
+    params: []
+    rval: []
+  airspyhf_set_sample_rate:
+    params: []
+    rval: []
+  airspyhf_get_calibration:
+    params: []
+    rval: []
+  airspyhf_set_calibration:
+    params: []
+    rval: []
+  airspyhf_set_optimal_iq_correction_point:
+    params: []
+    rval: []
+  airspyhf_iq_balancer_configure:
+    params: []
+    rval: []
+  airspyhf_flash_calibration:
+    params: []
+    rval: []
+  airspyhf_board_partid_serialno_read:
+    params: []
+    rval: []
+  airspyhf_version_string_read:
+    params: []
+    rval: []
+  airspyhf_set_user_output:
+    params: []
+    rval: []
+  airspyhf_set_hf_agc:
+    params: []
+    rval: []
+  airspyhf_set_hf_agc_threshold:
+    params: []
+    rval: []
+  airspyhf_set_hf_att:
+    params: []
+    rval: []

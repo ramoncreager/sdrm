@@ -20,35 +20,62 @@
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *******************************************************************/
+#if !defined(_AIRSPY_COMPONENT_H_)
+#define _AIRSPY_COMPONENT_H_
 
-#include <iostream>
 #include "matrix/Thread.h"
 #include "matrix/Component.h"
 
-class AirspyHF : public matrix::Component
+#include <iostream>
+#include <map>
+#include <memory>
+#include <libairspyhf/airspyhf.h>
+
+class AirspyComponent : public matrix::Component
 {
 public:
-    AirspyHF(std::string name, std::string urn) :
-        matrix::Component(name, urn),
-        run_thread(this, &AirspyHF::run_loop), ticks(0)
+
+    virtual ~AirspyComponent();
+    static Component *factory(std::string myname,std::string k);
+
+protected:
+    AirspyComponent(std::string name, std::string keymaster_url) :
+        matrix::Component(name, keymaster_url),
+        run_thread(this, &AirspyComponent::run_loop)
     {
         run_thread.start();
     }
 
-    void run_loop()
-    {
-        while(1)
-        {
-            sleep(1);
-            YAML::Node tm = keymaster->get("components." + my_instance_name + ".time");
-            std::cout << "Clock says " << tm.as<std::string>() << std::endl;
-            keymaster->put("components." + my_instance_name + ".time", ++ticks, true);
-        }
-    }
-    static Component *factory(std::string myname,std::string k)
-    { std::cout << "AirspyHF ctor" << std::endl; return new AirspyHF(myname, k); }
+    void run_loop();
+    void write_to_source(airspyhf_transfer_t *);
 
-protected:
-    matrix::Thread<AirspyHF> run_thread;
-    int ticks;
+    // handlers
+    void lib_version(std::string key, YAML::Node data);
+    void list_devices(std::string key, YAML::Node data);
+    void open(std::string key, YAML::Node data);
+    void open_sn(std::string key, YAML::Node data);
+    void close(std::string key, YAML::Node data);
+    void start(std::string key, YAML::Node data);
+    void stop(std::string key, YAML::Node data);
+    void is_streaming(std::string key, YAML::Node data);
+    void set_freq(std::string key, YAML::Node data);
+    void set_lib_dsp(std::string key, YAML::Node data);
+    void get_samplerates(std::string key, YAML::Node data);
+    void set_samplerate(std::string key, YAML::Node data);
+    void get_calibration(std::string key, YAML::Node data);
+    void set_calibration(std::string key, YAML::Node data);
+    void set_optimal_iq_correction_point(std::string key, YAML::Node data);
+    void iq_balancer_configure(std::string key, YAML::Node data);
+    void flash_calibration(std::string key, YAML::Node data);
+    void board_partid_serialno_read(std::string key, YAML::Node data);
+    void version_string_read(std::string key, YAML::Node data);
+    void set_user_output(std::string key, YAML::Node data);
+    void set_hf_agc(std::string key, YAML::Node data);
+    void set_hf_agc_threshold(std::string key, YAML::Node data);
+    void set_hf_att(std::string key, YAML::Node data);
+
+    matrix::Thread<AirspyComponent> run_thread;
+    std::map<std::string, decltype(&AirspyComponent::start)> handlers;
 };
+
+#endif
