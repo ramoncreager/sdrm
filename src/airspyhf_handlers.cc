@@ -39,32 +39,26 @@ map<airspyhf_device_t *, uint64_t> streamers;
 
 int rx_callback(airspyhf_transfer_t *transfer);
 
-template<typename T, typename... Args>
-void airspyhf_response(YAML::Node &rval, bool flag, T &a, Args... args)
+void do_rest(YAML::Node &)
 {
+}
+
+template<typename T, typename... Args>
+void do_rest(YAML::Node &rval, T &a, Args... args)
+{
+    rval.push_back(a);
+    do_rest(rval, args...);
+}
+
+template<typename T, typename... Args>
+YAML::Node airspyhf_response(bool flag, T &a, Args... args)
+{
+    YAML::Node rval;
     string error_code = flag ? "AIRSPYHF_SUCCESS" : "AIRSPYHF_ERROR";
-    rval["error_code"].push_back("AIRSPY_SUCCESS");
+    rval.push_back(error_code);
     rval.push_back(a);
-    airspyhf_response(rval, args...);
+    do_rest(rval, args...);
 }
-
-template<typename T, typename... Args>
-void airspyhf_response(YAML::Node &rval, T &a, Args... args)
-{
-    rval.push_back(a);
-    airspyhf_response(rval, args...);
-}
-
-template<typename T>
-void airspyhf_response(YAML::Node &rval, T&a)
-{
-    rval.push_back(a);
-}
-
-// void airspyhf_response(YAML::Node &)
-// {
-
-// }
 
 airspyhf_device_t *get_airspyhf_device(uint64_t sn)
 {
@@ -109,6 +103,7 @@ void call_handler_with_device(Fun &&func, shared_ptr<Keymaster> km,
     // create return value keys. Pop off the 'params' part and replace
     // it with the 'rval' part.
     boost::split(parts, key, boost::is_any_of("."));
+    string cmd = parts[1];
     parts.pop_back();
     parts.push_back("rval");
     string r_key = boost::algorithm::join(parts, ".");
@@ -119,16 +114,16 @@ void call_handler_with_device(Fun &&func, shared_ptr<Keymaster> km,
 
         if (dev)
         {
-            airspy_response(rval, true, func(dev, n));
+            rval = func(dev, sn, cmd);
         }
         else
         {
-            airspyhf_response(rval, false, "Unable to find device", sn);
+            rval = airspyhf_response(false, cmd, "Unable to find device", sn);
         }
     }
-    catch (std::runtime_error e)
+    catch (std::runtime_error &e)
     {
-        airspyhf_response(rval, false, "Runtime exception", e.what());
+        rval = airspyhf_response(false, cmd, "Runtime exception", e.what());
     }
 
     auto r = km->put(r_key, rval);
@@ -142,8 +137,7 @@ void call_handler_with_device(Fun &&func, shared_ptr<Keymaster> km,
 }
 
 template <class Fun>
-std::string call_handler(Fun &&func, shared_ptr<Keymaster> km,
-                         string key, YAML::Node &n)
+void call_handler(Fun &&func, shared_ptr<Keymaster> km, string key)
 {
     YAML::Node rval;
     vector<string> parts;
@@ -151,17 +145,18 @@ std::string call_handler(Fun &&func, shared_ptr<Keymaster> km,
     // create return value keys. Pop off the 'params' part and replace
     // it with the 'rval' part.
     boost::split(parts, key, boost::is_any_of("."));
+    string cmd = parts[1];
     parts.pop_back();
     parts.push_back("rval");
     string r_key = boost::algorithm::join(parts, ".");
 
     try
     {
-        airspyhf_response(rval, true, func(n));
+        rval = func(cmd);
     }
-    catch (std::runtime_error e)
+    catch (std::runtime_error &e)
     {
-        airspyhf_response(rval, false, "Runtime exception", e.what());
+        rval = airspyhf_response(false, cmd, "Runtime exception", e.what());
     }
 
     auto r = km->put(r_key, rval);
@@ -174,175 +169,139 @@ std::string call_handler(Fun &&func, shared_ptr<Keymaster> km,
     }
 }
 
-void AirspyComponent::lib_version(string key, YAML::Node data)
+void AirspyComponent::lib_version(string key, YAML::Node)
 {
     auto the_handler =
-        [](string, YAML::Node) -> YAML::Node
+        [](string cmd) -> YAML::Node
         {
-            YAML::Node rval;
             airspyhf_lib_version_t version;
             airspyhf_lib_version(&version);
-            airspyhf_response(rval, true,
+
+            return airspyhf_response(true, cmd,
                     version.major_version,
                     version.minor_version,
                     version.revision);
-            return rval;
         };
 
-    call_handler(the_handler, keymaster, key, data);
+    call_handler(the_handler, keymaster, key);
 }
 
-void AirspyComponent::list_devices(string key, YAML::Node data)
+void AirspyComponent::list_devices(string key, YAML::Node)
 {
     auto the_handler =
-        [](string, YAML::Node) -> YAML::Node
+        [](string cmd) -> YAML::Node
         {
-            YAML::Node rval;
             auto ndev = airspyhf_list_devices(0, 0);
-            int num_devs = 0;
-            uint64_t *serials;
+            vector<uint64_t> serials(ndev, 0);
 
-            serials = (uint64_t *)malloc(ndev*sizeof(uint64_t));
             // read all the serials and scan the receiver(s)
-            if (serials && (num_devs = airspyhf_list_devices(serials, ndev)) > 0)
+            if (airspyhf_list_devices((uint64_t *)serials.data(), ndev) > 0)
             {
-                airspyhf_response(rval, true, serials);
-            }
-            else
-            {
-                airspyhf_response(rval, false, "No devices found.");
+                return airspyhf_response(true, cmd, serials);
             }
 
-            return rval;
+            return airspyhf_response(false, cmd, "No devices found.");
         };
 
-    call_handler(the_handler, keymaster, key, data);
+    call_handler(the_handler, keymaster, key);
 }
 
-void AirspyComponent::open(string key, YAML::Node data)
+void AirspyComponent::open(string key, YAML::Node)
 {
     auto the_handler =
-        [](string, YAML::Node) -> YAML::Node
+        [](string cmd) -> YAML::Node
         {
-            YAML::Node rval;
             uint64_t sn = DEFAULT_DEVICE;
             airspyhf_device_t *dev;
+            bool status = false;
 
-            if (airspyhf_open(&dev) == AIRSPYHF_ERROR)
-            {
-                airspyhf_response(rval, false, "Could not open", sn);
-            }
-            else
+            if (airspyhf_open(&dev) == AIRSPYHF_SUCCESS)
             {
                 devices[sn] = dev;
                 // reverse lookup
                 streamers[dev] = sn;
-                airspyhf_response(rval, true, "Opened", sn);
+                status = true;
             }
 
-            return rval;
+            return airspyhf_response(status, cmd, sn);
         };
 
-    call_handler(the_handler, keymaster, key, data);
+    call_handler(the_handler, keymaster, key);
 }
 
 void AirspyComponent::open_sn(string key, YAML::Node data)
 {
     auto the_handler =
-        [](string, YAML::Node data) -> YAML::Node
+        [data](string cmd) -> YAML::Node
         {
-            YAML::Node rval;
             airspyhf_device_t *dev;
             auto sn = data[0].as<uint64_t>();
+            bool status = false;
 
-            if (airspyhf_open_sn(&dev, sn) == AIRSPYHF_ERROR)
-            {
-                airspyhf_response(rval, false, "Could not open ", sn);
-            }
-            else
+            if (airspyhf_open_sn(&dev, sn) == AIRSPYHF_SUCCESS)
             {
                 devices[sn] = dev;
                 // reverse lookup
                 streamers[dev] = sn;
-                airspyhf_response(rval, true, "Opened", sn);
+                status = true;
             }
 
-            return rval;
+            return airspyhf_response(status, cmd, sn);
         };
 
-    call_handler(the_handler, keymaster, key, data);
+    call_handler(the_handler, keymaster, key);
 }
 
 void AirspyComponent::close(string key, YAML::Node data)
 {
     auto the_handler =
-        [](string, YAML::Node data) -> YAML::Node
+        [data](string cmd) -> YAML::Node
         {
             YAML::Node rval;
             uint64_t sn = data[0].as<uint64_t>();
             airspyhf_device_t *dev;
             auto dev_pr = devices.find(sn);
+            bool status = false;
 
             if (dev_pr == devices.end())
             {
-                airspyhf_response(rval, false, "could not find the device", sn);
+                return airspyhf_response(false, cmd, sn, "could not find the device");
             }
-            else
+
+            dev = dev_pr->second;
+            devices.erase(dev_pr);
+
+            auto str_pr = streamers.find(dev);
+
+            if (str_pr != streamers.end())
             {
-                dev = dev_pr->second;
-                devices.erase(dev_pr);
-
-                auto str_pr = streamers.find(dev);
-
-                if (str_pr != streamers.end())
-                {
-                    streamers.erase(str_pr);
-                }
-
-                if (airspyhf_close(dev) == AIRSPYHF_ERROR)
-                {
-                    stringstream os;
-                    os << "Could not close " << sn;
-                    rval["error"].push_back("AIRSPYHF_ERROR");
-                    rval["error"].push_back(os.str());
-                }
-                else
-                {
-                    stringstream os;
-                    os << "closed " << sn;
-                    rval["error"].push_back("AIRSPYHF_SUCCESS");
-                    rval["error"].push_back(os.str());
-                }
+                streamers.erase(str_pr);
             }
 
-            return rval;
+            if (airspyhf_close(dev) == AIRSPYHF_SUCCESS)
+            {
+                status = true;
+            }
+
+            return airspyhf_response(status, cmd, sn);
         };
 
-    call_handler(the_handler, keymaster, key, data);
+    call_handler(the_handler, keymaster, key);
 }
 
 void AirspyComponent::start(string key, YAML::Node data)
 {
     auto the_handler =
-        [this](airspyhf_device_t *dev, string, YAML::Node data) -> YAML::Node
+        [this](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            YAML::Node rval;
-            uint64_t sn = data[0].as<uint64_t>();
+            bool status = false;
 
             if (airspyhf_start(dev, &rx_callback, this) == AIRSPYHF_SUCCESS)
             {
-                stringstream os;
-                rval["error"].push_back("AIRSPYHF_SUCCESS");
-                rval["error"].push_back("Streaming started");
-
-                rval = Puerta::response(true, cmd, "Streaming started.");
-            }
-            else
-            {
-                rval = Puerta::response(false, cmd, "airspyhf_start failed.");
+                status = true;
             }
 
-            return rval;
+            return airspyhf_response(status, cmd, sn);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -351,20 +310,11 @@ void AirspyComponent::start(string key, YAML::Node data)
 void AirspyComponent::stop(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            string rval;
-
-            if (airspyhf_stop(dev) == AIRSPYHF_SUCCESS)
-            {
-                rval = Puerta::response(true, cmd, "Streaming stopped.");
-            }
-            else
-            {
-                rval = Puerta::response(false, cmd, "airspyhf_stop failed.");
-            }
-
-            return rval;
+            bool status =
+                (airspyhf_stop(dev) == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -373,14 +323,10 @@ void AirspyComponent::stop(string key, YAML::Node data)
 void AirspyComponent::is_streaming(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            int streaming;
-            streaming = airspyhf_is_streaming(dev);
-            prepare_result(&result, true, cmd, 1);
-            as_x_encode_boolean(&result, streaming);
-            return ei_x_to_string(&result);
+            bool streaming = airspyhf_is_streaming(dev);
+            return airspyhf_response(true, cmd, sn, streaming);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -389,26 +335,12 @@ void AirspyComponent::is_streaming(string key, YAML::Node data)
 void AirspyComponent::set_freq(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            string rval;
-            ei_x_buff result;
-            uint64_t freq_hz = as_decode_ulong(data, index);
-
-            if (airspyhf_set_freq(dev, freq_hz) == AIRSPYHF_SUCCESS)
-            {
-                prepare_result(&result, true, cmd, 1);
-                as_x_encode_ulong(&result, freq_hz);
-                rval = ei_x_to_string(&result);
-            }
-            else
-            {
-                stringstream os;
-                os << "Unable to set frequency " << freq_hz << " Hz";
-                rval = Puerta::response(false, cmd, os.str());
-            }
-
-            return rval;
+            uint64_t freq_hz = data[1].as<uint64_t>();
+            bool status =
+                (airspyhf_set_freq(dev, freq_hz) == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn, freq_hz);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -417,28 +349,12 @@ void AirspyComponent::set_freq(string key, YAML::Node data)
 void AirspyComponent::set_lib_dsp(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            string rval;
-            ei_x_buff result;
-            int flag;
-
-            flag = as_decode_boolean(data, index);
-
-            if (airspyhf_set_lib_dsp(dev, flag) == AIRSPYHF_SUCCESS)
-            {
-                prepare_result(&result, true, cmd, 1);
-                as_x_encode_boolean(&result, flag);
-                rval = ei_x_to_string(&result);
-            }
-            else
-            {
-                stringstream os;
-                os << "Unable to set flag " << flag;
-                rval = Puerta::response(false, cmd, os.str());
-            }
-
-            return rval;
+            bool flag = data[1].as<bool>();
+            bool status =
+                (airspyhf_set_lib_dsp(dev, flag) == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn, flag);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -447,45 +363,21 @@ void AirspyComponent::set_lib_dsp(string key, YAML::Node data)
 void AirspyComponent::get_samplerates(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
             uint32_t num;
-            uint32_t *buffer;
-            string rval;
 
             if (airspyhf_get_samplerates(dev, &num, 0) == AIRSPYHF_SUCCESS)
             {
-                buffer = (uint32_t *)calloc(num, sizeof(uint32_t));
-
-                if (airspyhf_get_samplerates(dev, buffer, num) == AIRSPYHF_SUCCESS)
-                {
-                    prepare_result(&result, true, cmd, 1);
-                    as_x_encode_list_header(&result, num);
-
-                    for (int i = 0; i < num; ++i)
-                    {
-                        as_x_encode_ulong(&result, buffer[i]);
-                    }
-
-                    as_x_encode_empty_list(&result);
-                    rval = ei_x_to_string(&result);
-                }
-                else
-                {
-                    string msg{"Failed to get sample rates."};
-                    rval = Puerta::response(false, cmd, msg);
-                }
-
-                free(buffer);
-            }
-            else
-            {
-                string msg{"Failed to read sample rate numbers."};
-                rval = Puerta::response(false, cmd, msg);
+                vector<uint32_t> buffer(num, 0);
+                bool status =
+                    (airspyhf_get_samplerates(dev, (uint32_t *)buffer.data(), num)
+                     == AIRSPYHF_SUCCESS) ? true : false;
+                return airspyhf_response(status, cmd, sn, buffer);
             }
 
-            return rval;
+            return airspyhf_response(false, cmd, sn,
+                        "Failed to read sample rate numbers.");
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -494,26 +386,13 @@ void AirspyComponent::get_samplerates(string key, YAML::Node data)
 void AirspyComponent::set_samplerate(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            string rval;
-            uint64_t samplerate = as_decode_ulong(data, index);
-
-            if (airspyhf_set_samplerate(dev, samplerate) == AIRSPYHF_SUCCESS)
-            {
-                prepare_result(&result, true, cmd, 1);
-                as_x_encode_ulong(&result, samplerate);
-                rval = ei_x_to_string(&result);
-            }
-            else
-            {
-                stringstream os;
-                os << "Could not set samplerate " << samplerate;
-                rval = Puerta::response(false, cmd, os.str());
-            }
-
-            return rval;
+            uint64_t samplerate = data[1].as<uint64_t>();
+            bool status =
+                (airspyhf_set_samplerate(dev, samplerate)
+                 == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn, samplerate);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -522,20 +401,13 @@ void AirspyComponent::set_samplerate(string key, YAML::Node data)
 void AirspyComponent::get_calibration(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            string rval;
             int32_t calibration;
-
-            if (airspyhf_get_calibration(dev, &calibration) == AIRSPYHF_SUCCESS)
-            {
-                prepare_result(&result, true, cmd, 1);
-                as_x_encode_ulong(&result, calibration);
-                rval = ei_x_to_string(&result);
-            }
-
-            return rval;
+            bool status =
+            (airspyhf_get_calibration(dev, &calibration)
+             == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn, calibration);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -544,26 +416,13 @@ void AirspyComponent::get_calibration(string key, YAML::Node data)
 void AirspyComponent::set_calibration(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            string rval;
-            int32_t ppd = as_decode_ulong(data, index);
-
-            if (airspyhf_set_calibration(dev, ppd) == AIRSPYHF_SUCCESS)
-            {
-                prepare_result(&result, true, cmd, 1);
-                as_x_encode_ulong(&result, ppd);
-                rval = ei_x_to_string(&result);
-            }
-            else
-            {
-                stringstream os;
-                os << "Failed to set calibration value " << ppd;
-                rval = Puerta::response(false, cmd, os.str());
-            }
-
-            return rval;
+            int32_t ppd = data[1].as<int32_t>();
+            bool status =
+                (airspyhf_set_calibration(dev, ppd)
+                 == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn, ppd);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -572,26 +431,13 @@ void AirspyComponent::set_calibration(string key, YAML::Node data)
 void AirspyComponent::set_optimal_iq_correction_point(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            string rval;
-            double w = as_decode_double(data, index);
-
-            if (airspyhf_set_optimal_iq_correction_point(dev, w) == AIRSPYHF_SUCCESS)
-            {
-                prepare_result(&result, true, cmd, 1);
-                as_x_encode_double(&result, w);
-                rval = ei_x_to_string(&result);
-            }
-            else
-            {
-                stringstream os;
-                os << "failed to set optimal iq correction point " << w;
-                rval = Puerta::response(false, cmd, os.str());
-            }
-
-            return rval;
+            double w = data[1].as<double>();
+            bool status =
+                (airspyhf_set_optimal_iq_correction_point(dev, w)
+                 == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn, w);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -600,36 +446,21 @@ void AirspyComponent::set_optimal_iq_correction_point(string key, YAML::Node dat
 void AirspyComponent::iq_balancer_configure(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            string rval;
-            int buffers_to_skip = as_decode_long(data, index);
-            int fft_integration = as_decode_long(data, index);
-            int fft_overlap = as_decode_long(data, index);
-            int correlation_integration = as_decode_long(data, index);
-
-            if (airspyhf_iq_balancer_configure(dev, buffers_to_skip,
-                    fft_integration, fft_overlap, correlation_integration)
-                == AIRSPYHF_SUCCESS)
-            {
-                prepare_result(&result, true, cmd, 4);
-                as_x_encode_long(&result, buffers_to_skip);
-                as_x_encode_long(&result, fft_integration);
-                as_x_encode_long(&result, fft_overlap);
-                as_x_encode_long(&result, correlation_integration);
-                rval = ei_x_to_string(&result);
-            }
-            else
-            {
-                stringstream os;
-                os << "failed to set optimal iq balancer configuration "
-                   << buffers_to_skip << ", " << fft_integration << ", "
-                   << fft_overlap << ", " << correlation_integration;
-                rval = Puerta::response(false, cmd, os.str());
-            }
-
-            return rval;
+            int	buffers_to_skip = data[1].as<int>();
+            int	fft_integration = data[2].as<int>();
+            int	fft_overlap = data[3].as<int>();
+            int	correlation_integration = data[4].as<int>();
+            bool status =
+                (airspyhf_iq_balancer_configure(dev, buffers_to_skip,
+                        fft_integration, fft_overlap, correlation_integration)
+                 == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn,
+                    buffers_to_skip,
+                    fft_integration,
+                    fft_overlap,
+                    correlation_integration);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -638,28 +469,17 @@ void AirspyComponent::iq_balancer_configure(string key, YAML::Node data)
 void AirspyComponent::flash_calibration(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            string rval;
-
             if (airspyhf_is_streaming(dev))
             {
-                string msg{"Streaming is active. Please stop streaming and try again."};
-                rval = Puerta::response(false, cmd, msg);
-            }
-            else
-            {
-                if (airspyhf_flash_calibration(dev) == AIRSPYHF_SUCCESS)
-                {
-                    rval = Puerta::response(true, cmd, "Write succeeded.");
-                }
-                else
-                {
-                    rval = Puerta::response(false, cmd, "Write failed.");
-                }
+                return airspyhf_response(false, cmd, sn,
+                        "Streaming is active. Please stop streaming and try again.");
             }
 
-            return rval;
+            bool status =
+                (airspyhf_flash_calibration(dev) == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -668,23 +488,20 @@ void AirspyComponent::flash_calibration(string key, YAML::Node data)
 void AirspyComponent::board_partid_serialno_read(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
             airspyhf_read_partid_serialno_t pidsn;
             airspyhf_board_partid_serialno_read(dev, &pidsn);
-            prepare_result(&result, true, cmd, 2);
-            as_x_encode_ulong(&result, pidsn.part_id);
+            airspyhf_response(true, cmd, sn);
+
             int sn_len = sizeof(pidsn.serial_no) / sizeof(uint32_t);
-            as_x_encode_list_header(&result, sn_len);
 
             for (int i = 0; i < sn_len; ++i)
             {
-                as_x_encode_ulong(&result, pidsn.serial_no[i]);
+                rval.push_back(pidsn.serial_no[i]);
             }
 
-            as_x_encode_empty_list(&result);
-            return ei_x_to_string(&result);
+            return rval;
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -693,22 +510,18 @@ void AirspyComponent::board_partid_serialno_read(string key, YAML::Node data)
 void AirspyComponent::version_string_read(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            string rval;
+            YAML::Node rval;
             char ver[255];
 
             if (airspyhf_version_string_read(dev, ver, sizeof(ver)) == AIRSPYHF_SUCCESS)
             {
-                prepare_result(&result, true, cmd, 1);
-                as_x_encode_binary(&result, ver, strlen(ver));
-                rval = ei_x_to_string(&result);
+                airspyhf_response(rval, true, cmd, sn, ver);
             }
             else
             {
-                string msg{"Failed to read device version string"};
-                rval = Puerta::response(false, cmd, msg);
+                airspyhf_response(rval, false, cmd, sn);
             }
 
             return rval;
@@ -720,30 +533,22 @@ void AirspyComponent::version_string_read(string key, YAML::Node data)
 void AirspyComponent::set_user_output(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            string rval;
+            YAML::Node rval;
+            bool status = false;
+
             airspyhf_user_output_t pin =
-                (airspyhf_user_output_t)as_decode_long(data, index);
+                (airspyhf_user_output_t)data[1].as<int>();
             airspyhf_user_output_state_t value =
-                (airspyhf_user_output_state_t)as_decode_long(data, index);
+                (airspyhf_user_output_state_t)data[2].as<int>();
 
             if (airspyhf_set_user_output(dev, pin, value) == AIRSPYHF_SUCCESS)
             {
-                prepare_result(&result, true, cmd, 2);
-                as_x_encode_long(&result, pin);
-                as_x_encode_long(&result, value);
-                rval = ei_x_to_string(&result);
-            }
-            else
-            {
-                stringstream os;
-                os << "Could not set user output, pin: " << pin
-                   << ", value: " << value;
-                rval = Puerta::response(false, cmd, os.str());
+                status = true;
             }
 
+            airspyhf_response(rval, status, cmd, sn, (int)pin, (int)value);
             return rval;
         };
 
@@ -753,25 +558,18 @@ void AirspyComponent::set_user_output(string key, YAML::Node data)
 void AirspyComponent::set_hf_agc(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            string rval;
-            uint8_t flag = as_decode_long(data, index);
+            YAML::Node rval;
+            bool flag = data[1].as<bool>();
+            bool status = false;
 
             if (airspyhf_set_hf_agc(dev, flag) == AIRSPYHF_SUCCESS)
             {
-                prepare_result(&result, true, cmd, 1);
-                as_x_encode_long(&result, flag);
-                rval = ei_x_to_string(&result);
-            }
-            else
-            {
-                stringstream os;
-                os << "Failed to set hf agc to value: " << flag;
-                rval = Puerta::response(false, cmd, os.str());
+                status = true;
             }
 
+            airspyhf_response(rval, status, cmd, sn, flag);
             return rval;
         };
 
@@ -781,25 +579,18 @@ void AirspyComponent::set_hf_agc(string key, YAML::Node data)
 void AirspyComponent::set_hf_agc_threshold(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            string rval;
-            uint8_t flag = as_decode_long(data, index);
+            YAML::Node rval;
+            bool flag = data[1].as<bool>();
+            bool status = false;
 
             if (airspyhf_set_hf_agc_threshold(dev, flag) == AIRSPYHF_SUCCESS)
             {
-                prepare_result(&result, true, cmd, 1);
-                as_x_encode_long(&result, flag);
-                rval = ei_x_to_string(&result);
-            }
-            else
-            {
-                stringstream os;
-                os << "Failed to set hf agc threshold to value: " << flag;
-                rval = Puerta::response(false, cmd, os.str());
+                status = true;
             }
 
+            airspyhf_response(rval, status, cmd, sn, flag);
             return rval;
         };
 
@@ -809,25 +600,18 @@ void AirspyComponent::set_hf_agc_threshold(string key, YAML::Node data)
 void AirspyComponent::set_hf_att(string key, YAML::Node data)
 {
     auto the_handler =
-        [&](airspyhf_device_t *dev, string, YAML::Node) -> YAML::Node
+        [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            ei_x_buff result;
-            string rval;
-            uint8_t flag = as_decode_long(data, index);
+            YAML::Node rval;
+            bool flag = data[1].as<bool>();
+            bool status = false;
 
             if (airspyhf_set_hf_att(dev, flag) == AIRSPYHF_SUCCESS)
             {
-                prepare_result(&result, true, cmd, 1);
-                as_x_encode_long(&result, flag);
-                rval = ei_x_to_string(&result);
-            }
-            else
-            {
-                stringstream os;
-                os << "Failed to set hf att. to value: " << flag;
-                rval = Puerta::response(false, cmd, os.str());
+                status = true;
             }
 
+            airspyhf_response(rval, status, cmd, sn, flag);
             return rval;
         };
 

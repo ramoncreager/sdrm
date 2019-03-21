@@ -25,9 +25,3 @@
 
 using namespace std;
 using namespace matrix;
-
-
-
-AirspyComponent::AirspyComponent( )
-{
-}

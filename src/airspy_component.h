@@ -38,6 +38,8 @@ public:
     virtual ~AirspyComponent();
     static Component *factory(std::string myname,std::string k);
 
+    void write_to_source(airspyhf_transfer_t *);
+
 protected:
     AirspyComponent(std::string name, std::string keymaster_url) :
         matrix::Component(name, keymaster_url),
@@ -47,7 +49,6 @@ protected:
     }
 
     void run_loop();
-    void write_to_source(airspyhf_transfer_t *);
 
     // handlers
     void lib_version(std::string key, YAML::Node data);
