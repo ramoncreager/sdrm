@@ -27,6 +27,7 @@
 #include <libairspyhf/airspyhf.h>
 #include <boost/algorithm/string.hpp>
 #include <sstream>
+#include <memory.h>
 
 #define BUF_SIZE 128
 #define DEFAULT_DEVICE 0xFFFFFFFFFFFFFFFF
@@ -58,6 +59,7 @@ YAML::Node airspyhf_response(bool flag, T &a, Args... args)
     rval.push_back(error_code);
     rval.push_back(a);
     do_rest(rval, args...);
+    return rval;
 }
 
 airspyhf_device_t *get_airspyhf_device(uint64_t sn)
@@ -261,7 +263,6 @@ void AirspyComponent::close(string key, YAML::Node data)
             uint64_t sn = data[0].as<uint64_t>();
             airspyhf_device_t *dev;
             auto dev_pr = devices.find(sn);
-            bool status = false;
 
             if (dev_pr == devices.end())
             {
@@ -278,11 +279,9 @@ void AirspyComponent::close(string key, YAML::Node data)
                 streamers.erase(str_pr);
             }
 
-            if (airspyhf_close(dev) == AIRSPYHF_SUCCESS)
-            {
-                status = true;
-            }
-
+            bool status =
+                (airspyhf_close(dev)
+                 == AIRSPYHF_SUCCESS) ? true : false;
             return airspyhf_response(status, cmd, sn);
         };
 
@@ -294,13 +293,9 @@ void AirspyComponent::start(string key, YAML::Node data)
     auto the_handler =
         [this](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            bool status = false;
-
-            if (airspyhf_start(dev, &rx_callback, this) == AIRSPYHF_SUCCESS)
-            {
-                status = true;
-            }
-
+            bool status =
+                (airspyhf_start(dev, &rx_callback, this)
+                 == AIRSPYHF_SUCCESS) ? true : false;
             return airspyhf_response(status, cmd, sn);
         };
 
@@ -339,7 +334,8 @@ void AirspyComponent::set_freq(string key, YAML::Node data)
         {
             uint64_t freq_hz = data[1].as<uint64_t>();
             bool status =
-                (airspyhf_set_freq(dev, freq_hz) == AIRSPYHF_SUCCESS) ? true : false;
+                (airspyhf_set_freq(dev, freq_hz)
+                 == AIRSPYHF_SUCCESS) ? true : false;
             return airspyhf_response(status, cmd, sn, freq_hz);
         };
 
@@ -353,7 +349,8 @@ void AirspyComponent::set_lib_dsp(string key, YAML::Node data)
         {
             bool flag = data[1].as<bool>();
             bool status =
-                (airspyhf_set_lib_dsp(dev, flag) == AIRSPYHF_SUCCESS) ? true : false;
+                (airspyhf_set_lib_dsp(dev, flag)
+                 == AIRSPYHF_SUCCESS) ? true : false;
             return airspyhf_response(status, cmd, sn, flag);
         };
 
@@ -405,8 +402,8 @@ void AirspyComponent::get_calibration(string key, YAML::Node data)
         {
             int32_t calibration;
             bool status =
-            (airspyhf_get_calibration(dev, &calibration)
-             == AIRSPYHF_SUCCESS) ? true : false;
+                (airspyhf_get_calibration(dev, &calibration)
+                 == AIRSPYHF_SUCCESS) ? true : false;
             return airspyhf_response(status, cmd, sn, calibration);
         };
 
@@ -474,11 +471,13 @@ void AirspyComponent::flash_calibration(string key, YAML::Node data)
             if (airspyhf_is_streaming(dev))
             {
                 return airspyhf_response(false, cmd, sn,
-                        "Streaming is active. Please stop streaming and try again.");
+                        "Streaming is active. Please stop "
+                        "streaming and try again.");
             }
 
             bool status =
-                (airspyhf_flash_calibration(dev) == AIRSPYHF_SUCCESS) ? true : false;
+                (airspyhf_flash_calibration(dev)
+                 == AIRSPYHF_SUCCESS) ? true : false;
             return airspyhf_response(status, cmd, sn);
         };
 
@@ -492,16 +491,15 @@ void AirspyComponent::board_partid_serialno_read(string key, YAML::Node data)
         {
             airspyhf_read_partid_serialno_t pidsn;
             airspyhf_board_partid_serialno_read(dev, &pidsn);
-            airspyhf_response(true, cmd, sn);
-
+            vector<uint32_t> serial_no;
             int sn_len = sizeof(pidsn.serial_no) / sizeof(uint32_t);
 
             for (int i = 0; i < sn_len; ++i)
             {
-                rval.push_back(pidsn.serial_no[i]);
+                serial_no.push_back(pidsn.serial_no[i]);
             }
 
-            return rval;
+            return airspyhf_response(true, cmd, sn, pidsn.part_id, serial_no);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -514,17 +512,12 @@ void AirspyComponent::version_string_read(string key, YAML::Node data)
         {
             YAML::Node rval;
             char ver[255];
-
-            if (airspyhf_version_string_read(dev, ver, sizeof(ver)) == AIRSPYHF_SUCCESS)
-            {
-                airspyhf_response(rval, true, cmd, sn, ver);
-            }
-            else
-            {
-                airspyhf_response(rval, false, cmd, sn);
-            }
-
-            return rval;
+            memset(ver, 0, 255);
+            bool status =
+                (airspyhf_version_string_read(dev, ver, sizeof(ver))
+                 == AIRSPYHF_SUCCESS) ? true : false;
+            string version = ver;
+            return airspyhf_response(status, cmd, sn, version);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -535,21 +528,15 @@ void AirspyComponent::set_user_output(string key, YAML::Node data)
     auto the_handler =
         [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            YAML::Node rval;
-            bool status = false;
-
             airspyhf_user_output_t pin =
                 (airspyhf_user_output_t)data[1].as<int>();
             airspyhf_user_output_state_t value =
                 (airspyhf_user_output_state_t)data[2].as<int>();
 
-            if (airspyhf_set_user_output(dev, pin, value) == AIRSPYHF_SUCCESS)
-            {
-                status = true;
-            }
-
-            airspyhf_response(rval, status, cmd, sn, (int)pin, (int)value);
-            return rval;
+            bool status =
+                (airspyhf_set_user_output(dev, pin, value)
+                 == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn, (int)pin, (int)value);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -560,17 +547,11 @@ void AirspyComponent::set_hf_agc(string key, YAML::Node data)
     auto the_handler =
         [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            YAML::Node rval;
             bool flag = data[1].as<bool>();
-            bool status = false;
-
-            if (airspyhf_set_hf_agc(dev, flag) == AIRSPYHF_SUCCESS)
-            {
-                status = true;
-            }
-
-            airspyhf_response(rval, status, cmd, sn, flag);
-            return rval;
+            bool status =
+                (airspyhf_set_hf_agc(dev, flag)
+                 == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn, flag);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -583,15 +564,10 @@ void AirspyComponent::set_hf_agc_threshold(string key, YAML::Node data)
         {
             YAML::Node rval;
             bool flag = data[1].as<bool>();
-            bool status = false;
-
-            if (airspyhf_set_hf_agc_threshold(dev, flag) == AIRSPYHF_SUCCESS)
-            {
-                status = true;
-            }
-
-            airspyhf_response(rval, status, cmd, sn, flag);
-            return rval;
+            bool status =
+                (airspyhf_set_hf_agc_threshold(dev, flag)
+                 == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn, flag);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
@@ -602,17 +578,11 @@ void AirspyComponent::set_hf_att(string key, YAML::Node data)
     auto the_handler =
         [data](airspyhf_device_t *dev, uint64_t sn, string cmd) -> YAML::Node
         {
-            YAML::Node rval;
             bool flag = data[1].as<bool>();
-            bool status = false;
-
-            if (airspyhf_set_hf_att(dev, flag) == AIRSPYHF_SUCCESS)
-            {
-                status = true;
-            }
-
-            airspyhf_response(rval, status, cmd, sn, flag);
-            return rval;
+            bool status =
+                (airspyhf_set_hf_att(dev, flag)
+                 == AIRSPYHF_SUCCESS) ? true : false;
+            return airspyhf_response(status, cmd, sn, flag);
         };
 
     call_handler_with_device(the_handler, keymaster, key, data);
