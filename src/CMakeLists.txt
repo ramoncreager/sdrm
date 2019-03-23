@@ -10,11 +10,12 @@ airspy_component.h)
 set(SOURCE_FILES
 airspy_component.cc
 airspyhf_handlers.cc
+sdrm_main.cc
 )
 
 add_executable(sdrm ${SOURCE_FILES})
 target_link_libraries (sdrm LINK_PUBLIC matrix yaml-cpp zmq
-fftw3 airspyhf rt boost_regex matrix)
+fftw3 airspyhf rt boost_regex matrix pthread)
 
 # To install the .h files, try this recipie
 install(TARGETS sdrm DESTINATION bin)

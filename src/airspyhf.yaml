@@ -2,12 +2,19 @@
 Keymaster:
   URLS:
     Initial:
-      - inproc://matrix.keymaster
+      - inproc://airspyhf.keymaster
       - ipc:///tmp/airspyhf.keymaster
       - tcp://*:42000
 
   # temporary fix to limit yaml memory use	
   clone_interval: 50
+
+# The architect builds the components and controls their operation via
+# the Keymaster.
+
+architect:
+    control:
+        configuration: iq_monitor
 
 # Components in the system
 #
@@ -17,7 +24,7 @@ Keymaster:
 
 components:
   airspyhf:
-    type: AirspyHF
+    type: AirspyComponent
     devices: []
     ringbuffer_pool_size: 32 # IQ buffer pool size
     Sources:
@@ -31,93 +38,90 @@ components:
 # inner list: [source_component, source_name, sink_component, sink_name]
 
 connections:
-  CLOCK:
-    - [ZZ]
-    - [clock]
-    - [AA]
+  iq_monitor:
+    - [airspyhf]
 
-# This is the monitor and coltrol section, for the airspyhf
-# component. The idea is that any change to any of the `airspy_*`
-# values will trigger a publication of that value. Upon receipt the
-# component will execute the corresponding function with the given
-# parameters (if any). That's the idea, anyway. The AirspyHF component
-# will have to have a dedicated thread to respond to these
-# publications. It will use the internal thread in the airspyhf
-# library to publish IQ data over its conection.
+# This is the RPC section, for the airspyhf component. The idea is
+# that any change to any of the `airspy_*:request` values will trigger
+# a publication of that value. Upon receipt the component will execute
+# the corresponding function with the given parameters (if any), and
+# return any return values in the 'airspy_*:reply' value. That's the
+# idea, anyway. The AirspyHF component will have to have a dedicated
+# thread to respond to these publications. It will use the internal
+# thread in the airspyhf library to publish IQ data over its
+# conection.
 #
-# Note that AIRSPYPARAMS is a dictionary of dictionaries. The key of
-# each dictionary is the device's serial number. The entry
-# 0xFFFFFFFFFFFFFFFF is the key used for a single device opened via
-# 'airspyhf_open' rather than an 'airspyhf_open_sn'. It also serves as
-# the template for otherdevices.
+# Multiple devices are supported. An API function that supports a
+# specified device, on unpacking the request list, will treat the
+# first element as the serial number.
 
 AIRSPYCMDS:
   airspyhf_lib_version:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_list_devices:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_open:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_open_sn:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_close:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_start:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_stop:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_is_streaming:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_set_frequency:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_set_lib_dsp:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_get_sample_rates:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_set_sample_rate:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_get_calibration:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_set_calibration:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_set_optimal_iq_correction_point:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_iq_balancer_configure:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_flash_calibration:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_board_partid_serialno_read:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_version_string_read:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_set_user_output:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_set_hf_agc:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_set_hf_agc_threshold:
-    params: []
-    rval: []
+    request: []
+    reply: []
   airspyhf_set_hf_att:
-    params: []
-    rval: []
+    request: []
+    reply: []

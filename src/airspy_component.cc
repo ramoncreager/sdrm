@@ -25,3 +25,48 @@
 
 using namespace std;
 using namespace matrix;
+
+Component *AirspyComponent::factory(std::string name,std::string km_url)
+{
+    return new AirspyComponent(name, km_url);
+}
+
+AirspyComponent::~AirspyComponent()
+{
+
+}
+
+void AirspyComponent::run_loop()
+{
+
+}
+
+/**
+ * Writes to the component's source. This function is called by the
+ * callback function that is given to the airspyhf library's start()
+ * call. The start() function takes a void *ctx that can be anything
+ * of use. In this case it is the 'this' pointer to the
+ * AirspyComponent instance that is running. When called, the callback
+ * unpacks it and calls this function with it.
+ *
+ * @param transfer: a pointer to the airspyhf_transfer_t object given
+ * to the callback. The airspyhf_transfer_t structure is defined as
+ * follows:
+ *
+ *    typedef struct {
+ *        airspyhf_device_t* device;
+ *        void* ctx;
+ *        airspyhf_complex_float_t* samples;
+ *        int sample_count;
+ *        uint64_t dropped_samples;
+ *    } airspyhf_transfer_t;
+ *
+ * of interest to us here are the samples, the sample_count, and the
+ * dropped_samples count.
+ *
+ */
+
+void AirspyComponent::write_to_source(airspyhf_transfer_t *transfer)
+{
+    cout << "got " << transfer->sample_count << " samples." << endl;
+}
