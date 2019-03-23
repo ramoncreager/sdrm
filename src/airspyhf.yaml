@@ -2,7 +2,7 @@
 Keymaster:
   URLS:
     Initial:
-      - inproc://airspyhf.keymaster
+      # - inproc://airspyhf.keymaster
       - ipc:///tmp/airspyhf.keymaster
       - tcp://*:42000
 
