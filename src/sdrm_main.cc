@@ -39,8 +39,6 @@ using namespace TCLAP;
 static matrix::log_t logger("main");
 static string km_tcp_url{"tcp://localhost:42000"};
 
-string get_most_local(vector<string> urls);
-
 class SDRMArchitect : public Architect
 {
 public:
@@ -76,39 +74,41 @@ int main(int argc, char **argv)
         CmdLine cmd("sdrm: Software Defined Radio, Matrix");
 
         // Define a switch and add it to the command line.
-        ValueArg<string> logLevel("l", "log", "Log level, one of DEBUG|INFO|WARNING",
-                false,
-                "WARNING",
-                "string"
-            );
+        ValueArg<string> logLevel(
+            "l", "log", "Log level, one of DEBUG|INFO|WARNING",
+                false, "WARNING", "string");
         cmd.add(logLevel);
         // Parse the args.
         cmd.parse(argc, argv);
-
-        matrix::log_t::add_backend(shared_ptr<matrix::log_t::Backend>(
-                    new matrix::log_t::ostreamBackendColor(cout)));
+        // Picks basic backend if stdout is redirected to a log. Picks the
+        // ANSI color backend if in a terminal
+        log_t::set_default_backend();
 
         string loglevel = logLevel.getValue();
 
         if (loglevel == "INFO")
         {
-            matrix::log_t::set_log_level(matrix::log_t::INFO_LEVEL);
+            log_t::set_log_level(Levels::INFO_LEVEL);
         }
         else if (loglevel == "DEBUG")
         {
-            matrix::log_t::set_log_level(matrix::log_t::DEBUG_LEVEL);
+            log_t::set_log_level(Levels::DEBUG_LEVEL);
+        }
+        else if (loglevel == "WARNING")
+        {
+            log_t::set_log_level(Levels::WARNING_LEVEL);
         }
         else
         {
-            matrix::log_t::set_log_level(matrix::log_t::WARNING_LEVEL);
+            log_t::set_log_level(Levels::ERROR_LEVEL);
         }
 
         Architect::create_keymaster_server("airspyhf.yaml");
         Keymaster km(km_tcp_url);
         auto urls = km.get_as<vector<string>>("Keymaster.URLS.AsConfigured.State");
-        cout << urls << endl;
+        logger.debug(__PRETTY_FUNCTION__, "Available URLs: ", urls);
         auto km_url = get_most_local(urls);
-        cout << km_url << endl;
+        logger.debug(__PRETTY_FUNCTION__, "Most local url:", km_url);
 
         SDRMArchitect sdrm("control", km_url);
         // wait for the keymaster events which report components in the Standby state.
@@ -117,37 +117,50 @@ int main(int argc, char **argv)
 
         if (!result)
         {
-            cout << "initial standby state error" << endl;
+            auto components = sdrm.components_not_in_state("Standby");
+            logger.warning(__PRETTY_FUNCTION__, "Not all in Standby: ", components);
         }
 
-        // sdrm.set_system_mode("iq_monitor");
-        // // Everybody now in standby. Get things running by issuing a start event.
-        // sdrm.ready();
-        // result = sdrm.wait_all_in_state("Ready", 1000000);
+        sdrm.set_system_mode("iq_monitor");
+        logger.debug(__PRETTY_FUNCTION__, "Everybody now in standby. Get things",
+                     "running by issuing a start event.");
+        sdrm.ready();
+        logger.debug(__PRETTY_FUNCTION__, "Waiting for components to go to Ready");
+        result = sdrm.wait_all_in_state("Ready", 1000000);
 
-        // if (!result)
-        // {
-        //     cout << "initial standby state error" << endl;
-        // }
+        if (!result)
+        {
+            auto components = sdrm.components_not_in_state("Ready");
+            logger.warning(__PRETTY_FUNCTION__, "Not all in Ready: ", components);
+        }
 
-        // sdrm.start();
-        // result = sdrm.wait_all_in_state("Running", 1000000);
+        Time::Time_t now, last_pulse_update = 0;
+        int year, month, dayofmonth, hour, minute;
+        double second;
+        char buf[80];
 
-        // if (!result)
-        // {
-        //     cout << "initial standby state error" << endl;
-        // }
+        while(true)
+        {
+            now = Time::getUTC();
 
-        // while (!sdrm.wait_all_in_state("Ready", 1000000));
+            if (now - last_pulse_update > Time::TM_ONE_SEC)
+            {
+                Time::calendarDate(now, year, month, dayofmonth, hour, minute, second);
+                sprintf(buf, "%04i/%02i/%02i %02i:%02i:%02.0f",
+                        year, month, dayofmonth, hour, minute, second);
+                km.put_nb("OBS_PARAMS.DAQPULSE", buf);
+                last_pulse_update = now;
+            }
 
-        // sleep(1);
+            Time::thread_delay(1000000000L);
+        }
     }
     catch (KeymasterException &e)
     {
         logger.fatal(e.what());
         rval = 1;
     }
-    catch (ArgException &e)  // catch any exceptions
+    catch (ArgException &e)
 	{
         logger.fatal(e.error(), " for arg ", e.argId());
         rval = 1;
@@ -165,46 +178,4 @@ int main(int argc, char **argv)
 
     Architect::destroy_keymaster_server();
     return rval;
-}
-
-string get_most_local(vector<string> urls)
-{
-    string inproc{"inproc"};
-    string ipc{"ipc"};
-    string tcp{"tcp"};
-
-    auto inproc_it = find_if(urls.begin(), urls.end(),
-                             [inproc](auto x)
-                             {
-                                 return x.find(inproc) != string::npos;
-                             });
-
-    if (inproc_it != urls.end())
-    {
-        return *inproc_it;
-    }
-
-    auto ipc_iter = find_if(urls.begin(), urls.end(),
-                            [ipc](auto x)
-                            {
-                                return x.find(ipc) != string::npos;
-                            });
-
-    if (ipc_iter != urls.end())
-    {
-        return *ipc_iter;
-    }
-
-    auto tcp_iter = find_if(urls.begin(), urls.end(),
-                            [tcp](auto x)
-                            {
-                                return x.find(tcp) != string::npos;
-                            });
-
-    if (tcp_iter != urls.end())
-    {
-        return *tcp_iter;
-    }
-
-    return "";
 }
