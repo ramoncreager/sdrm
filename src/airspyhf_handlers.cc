@@ -23,6 +23,7 @@
 #include <matrix/Keymaster.h>
 #include <matrix/yaml_util.h>
 #include <matrix/matrix_util.h>
+#include <matrix/log_t.h>
 #include <yaml-cpp/yaml.h>
 #include <libairspyhf/airspyhf.h>
 #include <boost/algorithm/string.hpp>
@@ -37,6 +38,8 @@ using namespace matrix;
 
 map<uint64_t, airspyhf_device_t *> devices;
 map<airspyhf_device_t *, uint64_t> streamers;
+
+static matrix::log_t logger("airspy_handler");
 
 int rx_callback(airspyhf_transfer_t *transfer);
 
@@ -107,7 +110,7 @@ void call_handler_with_device(Fun &&func, shared_ptr<Keymaster> km,
     boost::split(parts, key, boost::is_any_of("."));
     string cmd = parts[1];
     parts.pop_back();
-    parts.push_back("rval");
+    parts.push_back("reply");
     string r_key = boost::algorithm::join(parts, ".");
 
     try
@@ -128,9 +131,7 @@ void call_handler_with_device(Fun &&func, shared_ptr<Keymaster> km,
         rval = airspyhf_response(false, cmd, "Runtime exception", e.what());
     }
 
-    auto r = km->put(r_key, rval);
-
-    if (not r)
+    if (not km->put(r_key, rval, true))
     {
         stringstream os;
         os << "Keymaster::put(" << r_key << ", " << rval << ") failed.";
@@ -149,7 +150,7 @@ void call_handler(Fun &&func, shared_ptr<Keymaster> km, string key)
     boost::split(parts, key, boost::is_any_of("."));
     string cmd = parts[1];
     parts.pop_back();
-    parts.push_back("rval");
+    parts.push_back("reply");
     string r_key = boost::algorithm::join(parts, ".");
 
     try
@@ -161,9 +162,8 @@ void call_handler(Fun &&func, shared_ptr<Keymaster> km, string key)
         rval = airspyhf_response(false, cmd, "Runtime exception", e.what());
     }
 
-    auto r = km->put(r_key, rval);
 
-    if (not r)
+    if (not km->put(r_key, rval, true))
     {
         stringstream os;
         os << "Keymaster::put(" << r_key << ", " << rval << ") failed.";
@@ -185,6 +185,7 @@ void AirspyComponent::lib_version(string key, YAML::Node)
                     version.revision);
         };
 
+    logger.debug(__PRETTY_FUNCTION__, "lib_version called. key:", key);
     call_handler(the_handler, keymaster, key);
 }
 
