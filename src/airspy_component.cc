@@ -21,6 +21,8 @@
  *
  *******************************************************************/
 
+#include <memory>
+
 #include "airspy_component.h"
 
 using namespace std;
@@ -31,15 +33,79 @@ Component *AirspyComponent::factory(std::string name,std::string km_url)
     return new AirspyComponent(name, km_url);
 }
 
+AirspyComponent::AirspyComponent(std::string name, std::string keymaster_url) :
+    Component(name, keymaster_url)
+    // run_thread(this, &AirspyComponent::run_loop)
+{
+    handlers =
+        {
+            {"airspyhf_lib_version",
+             cb_t(new member_cb(this, &AirspyComponent::lib_version))},
+            {"airspyhf_list_devices",
+             cb_t(new member_cb(this, &AirspyComponent::list_devices))},
+            {"airspyhf_open",
+             cb_t(new member_cb(this, &AirspyComponent::open))},
+            {"airspyhf_open_sn",
+             cb_t(new member_cb(this, &AirspyComponent::open_sn))},
+            {"airspyhf_close",
+             cb_t(new member_cb(this, &AirspyComponent::close))},
+            {"airspyhf_start",
+             cb_t(new member_cb(this, &AirspyComponent::start))},
+            {"airspyhf_stop",
+             cb_t(new member_cb(this, &AirspyComponent::stop))},
+            {"airspyhf_is_streaming",
+             cb_t(new member_cb(this, &AirspyComponent::is_streaming))},
+            {"airspyhf_set_freq",
+             cb_t(new member_cb(this, &AirspyComponent::set_freq))},
+            {"airspyhf_set_lib_dsp",
+             cb_t(new member_cb(this, &AirspyComponent::set_lib_dsp))},
+            {"airspyhf_get_samplerates",
+             cb_t(new member_cb(this, &AirspyComponent::get_samplerates))},
+            {"airspyhf_set_samplerate",
+             cb_t(new member_cb(this, &AirspyComponent::set_samplerate))},
+            {"airspyhf_get_calibration",
+             cb_t(new member_cb(this, &AirspyComponent::get_calibration))},
+            {"airspyhf_set_calibration",
+             cb_t(new member_cb(this, &AirspyComponent::set_calibration))},
+            {"airspyhf_set_optimal_iq_correction_point",
+             cb_t(new member_cb(this, &AirspyComponent::set_optimal_iq_correction_point))},
+            {"airspyhf_iq_balancer_configure",
+             cb_t(new member_cb(this, &AirspyComponent::iq_balancer_configure))},
+            {"airspyhf_flash_calibration",
+             cb_t(new member_cb(this, &AirspyComponent::flash_calibration))},
+            {"airspyhf_board_partid_serialno_read",
+             cb_t(new member_cb(this, &AirspyComponent::board_partid_serialno_read))},
+            {"airspyhf_version_string_read",
+             cb_t(new member_cb(this, &AirspyComponent::version_string_read))},
+            {"airspyhf_set_user_output",
+             cb_t(new member_cb(this, &AirspyComponent::set_user_output))},
+            {"airspyhf_set_hf_agc",
+             cb_t(new member_cb(this, &AirspyComponent::set_hf_agc))},
+            {"airspyhf_set_hf_agc_threshold",
+             cb_t(new member_cb(this, &AirspyComponent::set_hf_agc_threshold))},
+            {"airspyhf_set_hf_att",
+             cb_t(new member_cb(this, &AirspyComponent::set_hf_att))}
+        };
+
+    for (auto handler: handlers)
+    {
+        auto key = handler.first;
+        auto ptr = handler.second;
+        keymaster->subscribe("AIRSPYCMDS." + key + ".request", ptr.get());
+    }
+
+    // run_thread.start();
+}
+
 AirspyComponent::~AirspyComponent()
 {
 
 }
 
-void AirspyComponent::run_loop()
-{
+// void AirspyComponent::run_loop()
+// {
 
-}
+// }
 
 /**
  * Writes to the component's source. This function is called by the

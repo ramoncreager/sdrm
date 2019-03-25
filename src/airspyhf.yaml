@@ -80,16 +80,16 @@ AIRSPYCMDS:
   airspyhf_is_streaming:
     request: []
     reply: []
-  airspyhf_set_frequency:
+  airspyhf_set_freq:
     request: []
     reply: []
   airspyhf_set_lib_dsp:
     request: []
     reply: []
-  airspyhf_get_sample_rates:
+  airspyhf_get_samplerates:
     request: []
     reply: []
-  airspyhf_set_sample_rate:
+  airspyhf_set_samplerate:
     request: []
     reply: []
   airspyhf_get_calibration:

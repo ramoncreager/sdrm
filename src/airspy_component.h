@@ -36,19 +36,13 @@ class AirspyComponent : public matrix::Component
 public:
 
     virtual ~AirspyComponent();
-    static Component *factory(std::string myname,std::string k);
-
     void write_to_source(airspyhf_transfer_t *);
 
-protected:
-    AirspyComponent(std::string name, std::string keymaster_url) :
-        matrix::Component(name, keymaster_url),
-        run_thread(this, &AirspyComponent::run_loop)
-    {
-        run_thread.start();
-    }
+    static Component *factory(std::string myname,std::string k);
 
-    void run_loop();
+protected:
+    AirspyComponent(std::string name, std::string keymaster_url);
+    // void run_loop();
 
     // handlers
     void lib_version(std::string key, YAML::Node data);
@@ -75,8 +69,11 @@ protected:
     void set_hf_agc_threshold(std::string key, YAML::Node data);
     void set_hf_att(std::string key, YAML::Node data);
 
-    matrix::Thread<AirspyComponent> run_thread;
-    std::map<std::string, decltype(&AirspyComponent::start)> handlers;
+    using member_cb = matrix::KeymasterMemberCB<AirspyComponent>;
+    using  cb_t = std::shared_ptr<member_cb>;
+
+    // matrix::Thread<AirspyComponent> run_thread;
+    std::map<std::string, cb_t> handlers;
 };
 
 #endif
