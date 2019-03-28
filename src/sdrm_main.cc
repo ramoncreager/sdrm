@@ -126,7 +126,7 @@ int main(int argc, char **argv)
                      "running by issuing a start event.");
         sdrm.ready();
         logger.debug(__PRETTY_FUNCTION__, "Waiting for components to go to Ready");
-        result = sdrm.wait_all_in_state("Ready", 1000000);
+        result = sdrm.wait_all_in_state("Ready", 4000000);
 
         if (!result)
         {

@@ -21,12 +21,21 @@
  *
  *******************************************************************/
 
-#include <memory>
-
 #include "airspy_component.h"
+
+#include <memory>
+#include <matrix/matrix_util.h>
 
 using namespace std;
 using namespace matrix;
+using namespace mxutils;
+
+ostream & operator << (ostream &o,  const airspyhf_complex_float_t &v)
+{
+    o << "{" << v.re << ", " << v.im << "}";
+    return o;
+}
+
 
 Component *AirspyComponent::factory(std::string name,std::string km_url)
 {
@@ -34,56 +43,56 @@ Component *AirspyComponent::factory(std::string name,std::string km_url)
 }
 
 AirspyComponent::AirspyComponent(std::string name, std::string keymaster_url) :
-    Component(name, keymaster_url)
-    // run_thread(this, &AirspyComponent::run_loop)
+    Component(name, keymaster_url),
+    iq_signal_source(keymaster_url, name, "iq_data")
 {
     handlers =
         {
-            {"airspyhf_lib_version",
+            {"lib_version",
              cb_t(new member_cb(this, &AirspyComponent::lib_version))},
-            {"airspyhf_list_devices",
+            {"list_devices",
              cb_t(new member_cb(this, &AirspyComponent::list_devices))},
-            {"airspyhf_open",
+            {"open",
              cb_t(new member_cb(this, &AirspyComponent::open))},
-            {"airspyhf_open_sn",
+            {"open_sn",
              cb_t(new member_cb(this, &AirspyComponent::open_sn))},
-            {"airspyhf_close",
+            {"close",
              cb_t(new member_cb(this, &AirspyComponent::close))},
-            {"airspyhf_start",
+            {"start",
              cb_t(new member_cb(this, &AirspyComponent::start))},
-            {"airspyhf_stop",
+            {"stop",
              cb_t(new member_cb(this, &AirspyComponent::stop))},
-            {"airspyhf_is_streaming",
+            {"is_streaming",
              cb_t(new member_cb(this, &AirspyComponent::is_streaming))},
-            {"airspyhf_set_freq",
+            {"set_freq",
              cb_t(new member_cb(this, &AirspyComponent::set_freq))},
-            {"airspyhf_set_lib_dsp",
+            {"set_lib_dsp",
              cb_t(new member_cb(this, &AirspyComponent::set_lib_dsp))},
-            {"airspyhf_get_samplerates",
+            {"get_samplerates",
              cb_t(new member_cb(this, &AirspyComponent::get_samplerates))},
-            {"airspyhf_set_samplerate",
+            {"set_samplerate",
              cb_t(new member_cb(this, &AirspyComponent::set_samplerate))},
-            {"airspyhf_get_calibration",
+            {"get_calibration",
              cb_t(new member_cb(this, &AirspyComponent::get_calibration))},
-            {"airspyhf_set_calibration",
+            {"set_calibration",
              cb_t(new member_cb(this, &AirspyComponent::set_calibration))},
-            {"airspyhf_set_optimal_iq_correction_point",
+            {"set_optimal_iq_correction_point",
              cb_t(new member_cb(this, &AirspyComponent::set_optimal_iq_correction_point))},
-            {"airspyhf_iq_balancer_configure",
+            {"iq_balancer_configure",
              cb_t(new member_cb(this, &AirspyComponent::iq_balancer_configure))},
-            {"airspyhf_flash_calibration",
+            {"flash_calibration",
              cb_t(new member_cb(this, &AirspyComponent::flash_calibration))},
-            {"airspyhf_board_partid_serialno_read",
+            {"board_partid_serialno_read",
              cb_t(new member_cb(this, &AirspyComponent::board_partid_serialno_read))},
-            {"airspyhf_version_string_read",
+            {"version_string_read",
              cb_t(new member_cb(this, &AirspyComponent::version_string_read))},
-            {"airspyhf_set_user_output",
+            {"set_user_output",
              cb_t(new member_cb(this, &AirspyComponent::set_user_output))},
-            {"airspyhf_set_hf_agc",
+            {"set_hf_agc",
              cb_t(new member_cb(this, &AirspyComponent::set_hf_agc))},
-            {"airspyhf_set_hf_agc_threshold",
+            {"set_hf_agc_threshold",
              cb_t(new member_cb(this, &AirspyComponent::set_hf_agc_threshold))},
-            {"airspyhf_set_hf_att",
+            {"set_hf_att",
              cb_t(new member_cb(this, &AirspyComponent::set_hf_att))}
         };
 
@@ -134,5 +143,5 @@ AirspyComponent::~AirspyComponent()
 
 void AirspyComponent::write_to_source(airspyhf_transfer_t *transfer)
 {
-    cout << "got " << transfer->sample_count << " samples." << endl;
+    cout << transfer->samples[0] << endl;
 }

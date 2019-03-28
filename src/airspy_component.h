@@ -23,8 +23,11 @@
 #if !defined(_AIRSPY_COMPONENT_H_)
 #define _AIRSPY_COMPONENT_H_
 
+#include "sdrm_types.h"
+
 #include "matrix/Thread.h"
 #include "matrix/Component.h"
+#include "matrix/DataSource.h"
 
 #include <iostream>
 #include <map>
@@ -42,7 +45,6 @@ public:
 
 protected:
     AirspyComponent(std::string name, std::string keymaster_url);
-    // void run_loop();
 
     // handlers
     void lib_version(std::string key, YAML::Node data);
@@ -74,6 +76,7 @@ protected:
 
     // matrix::Thread<AirspyComponent> run_thread;
     std::map<std::string, cb_t> handlers;
+    matrix::DataSource<sdrm::iq_data_t> iq_signal_source;
 };
 
 #endif

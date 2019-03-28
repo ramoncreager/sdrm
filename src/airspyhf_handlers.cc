@@ -281,8 +281,7 @@ void AirspyComponent::close(string key, YAML::Node data)
             }
 
             bool status =
-                (airspyhf_close(dev)
-                 == AIRSPYHF_SUCCESS) ? true : false;
+                (airspyhf_close(dev) == AIRSPYHF_SUCCESS) ? true : false;
             return airspyhf_response(status, cmd, sn);
         };
 
