@@ -102,19 +102,31 @@ AirspyComponent::AirspyComponent(std::string name, std::string keymaster_url) :
         auto ptr = handler.second;
         keymaster->subscribe("AIRSPYCMDS." + key + ".request", ptr.get());
     }
-
-    // run_thread.start();
 }
 
 AirspyComponent::~AirspyComponent()
 {
-
 }
 
-// void AirspyComponent::run_loop()
-// {
+bool AirspyComponent::_do_start()
+{
+    return true;
+}
 
-// }
+bool AirspyComponent::_do_stop()
+{
+    return true;
+}
+
+bool AirspyComponent::_do_ready()
+{
+    return true;
+}
+
+bool AirspyComponent::_do_standby()
+{
+    return true;
+}
 
 /**
  * Writes to the component's source. This function is called by the
@@ -143,5 +155,8 @@ AirspyComponent::~AirspyComponent()
 
 void AirspyComponent::write_to_source(airspyhf_transfer_t *transfer)
 {
-    cout << transfer->samples[0] << endl;
+    sdrm::iq_data_t data(transfer);
+    msgpack::sbuffer srcbuf;
+    msgpack::pack(srcbuf, data);
+    iq_signal_source.publish(srcbuf);
 }

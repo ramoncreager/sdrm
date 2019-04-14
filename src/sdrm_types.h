@@ -26,6 +26,7 @@
 #include <libairspyhf/airspyhf.h>
 #include <utility>
 #include <algorithm>
+#include <msgpack.hpp>
 
 // typedef struct {
 //     airspyhf_device_t* device;
@@ -37,6 +38,13 @@
 
 namespace sdrm
 {
+    struct complex_float_t
+    {
+        float re;
+        float im;
+        MSGPACK_DEFINE(re, im);
+    };
+
     struct iq_data_t
     {
         iq_data_t();
@@ -48,7 +56,8 @@ namespace sdrm
 
         int sample_count;
         uint64_t dropped_samples;
-        airspyhf_complex_float_t *samples;
+        std::vector<complex_float_t> samples;
+        MSGPACK_DEFINE(sample_count, dropped_samples, samples);
     };
 }
 

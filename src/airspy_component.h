@@ -46,6 +46,12 @@ public:
 protected:
     AirspyComponent(std::string name, std::string keymaster_url);
 
+    // override various base class methods
+    virtual bool _do_start() override;
+    virtual bool _do_stop()  override;
+    virtual bool _do_ready() override;
+    virtual bool _do_standby() override;
+
     // handlers
     void lib_version(std::string key, YAML::Node data);
     void list_devices(std::string key, YAML::Node data);
@@ -76,7 +82,8 @@ protected:
 
     // matrix::Thread<AirspyComponent> run_thread;
     std::map<std::string, cb_t> handlers;
-    matrix::DataSource<sdrm::iq_data_t> iq_signal_source;
+    matrix::DataSource<msgpack::sbuffer> iq_signal_source;
+
 };
 
 #endif

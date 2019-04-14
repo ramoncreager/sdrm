@@ -20,13 +20,15 @@
  *******************************************************************/
 
 #include "sdrm_types.h"
+#include <memory.h>
+
+using namespace std;
 
 namespace sdrm
 {
     iq_data_t::iq_data_t()
         : sample_count(0),
-          dropped_samples(0),
-          samples(nullptr)
+          dropped_samples(0)
     {
     }
 
@@ -35,39 +37,29 @@ namespace sdrm
     {
         sample_count = transfer->sample_count;
         dropped_samples = transfer->dropped_samples;
-        samples = new airspyhf_complex_float_t[sample_count];
-        std::copy(transfer->samples, transfer->samples + sample_count, samples);
+        vector<complex_float_t> cv(sample_count);
+        memcpy((void *)cv.data(), transfer->samples,
+               sample_count * sizeof(complex_float_t));
+        samples = std::move(cv);
     }
 
     iq_data_t::iq_data_t(iq_data_t &&other)
-        : sample_count(0),
-          dropped_samples(0),
-          samples(nullptr)
     {
         *this = std::move(other);
     }
 
     iq_data_t::~iq_data_t()
     {
-        if (samples != nullptr)
-        {
-            delete [] samples;
-        }
     }
 
     iq_data_t &iq_data_t::operator=(iq_data_t &&other)
     {
         if (this != &other)
         {
-            if (samples != nullptr)
-            {
-                delete [] samples;
-            }
-
-            samples = other.samples;
+            samples = std::move(other.samples);
             sample_count = other.sample_count;
             dropped_samples = other.dropped_samples;
-            other.samples = nullptr;
+            other.samples.clear();
             other.sample_count = 0;
             other.dropped_samples = 0;
         }
