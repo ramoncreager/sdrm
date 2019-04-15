@@ -3,7 +3,7 @@
  *  more AirspyHF+ modules, and is the source of the IQ data from
  *  those modules.
  *
- *  Copyright (C) 2019 Associated Universities, Inc. Washington DC, USA.
+ *  Copyright (C) 2019 Ramon Creager
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
