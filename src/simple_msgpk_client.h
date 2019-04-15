@@ -46,11 +46,14 @@ protected:
     // override various base class methods
     virtual bool _do_start() override;
     virtual bool _do_stop()  override;
-    virtual bool _do_ready() override;
-    virtual bool _do_standby() override;
 
-    matrix::Thread<MsgpackComponent> run_thread;
-    std::unique_ptr< matrix::DataSink<msgpack::sbuffer, matrix::select_only> > input_signal_sink;
+    bool connect();
+    bool disconnect();
+
+    std::atomic<bool> _run;
+    matrix::TCondition<bool> _run_thread_started; 
+    matrix::Thread<MsgpackComponent> _run_thread;
+    std::unique_ptr< matrix::DataSink<std::string, matrix::select_only> > input_signal_sink;
 
     void receiving_task();
 

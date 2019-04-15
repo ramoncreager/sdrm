@@ -39,7 +39,7 @@ components:
 
 connections:
   iq_monitor:
-    - [airspyhf, iq_data]
+    - [airspyhf, iq_data, simple_msgpk_client, input_data]
 
 # This is the RPC section, for the airspyhf component. The idea is
 # that any change to any of the `airspy_*:request` values will trigger

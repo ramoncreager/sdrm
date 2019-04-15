@@ -16,6 +16,7 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 #include "airspy_component.h"
+#include "simple_msgpk_client.h"
 
 #include "matrix/Architect.h"
 #include "matrix/Component.h"
@@ -50,6 +51,7 @@ SDRMArchitect::SDRMArchitect(string name, string km_url) :
     Architect(name, km_url)
 {
     add_component_factory("AirspyComponent", &AirspyComponent::factory);
+    add_component_factory("simple_msgpk_client", &MsgpackComponent::factory);
 
     try
     {
